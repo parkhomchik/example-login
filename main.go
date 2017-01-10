@@ -27,32 +27,47 @@ const loginBlock = `<form action="/login" method="post">
     <input type="submit" value="Login">
 </form>`
 
-//SESSIONS
+const logoffBlock = `<form action="/logoff" method="post">
+    <input type="hidden" name="csrf" value="">    
+	<h1>%s</h1>
+    <input type="submit" value="Logoff">
+</form>`
 
+//SessionManager -
 type SessionManager struct {
 	Sessions map[string]string
 }
 
+//NewSessions -
 func NewSessions() *SessionManager {
 	s := new(SessionManager)
 	s.Sessions = make(map[string]string)
 	return s
 }
 
+//Add -
 func (s *SessionManager) Add(userName string, sessionID string) {
 	if _, ok := s.Sessions[sessionID]; !ok {
 		s.Sessions[sessionID] = userName
 	}
 }
 
+//GetUser -
 func (s *SessionManager) GetUser(sessionID string) (User string) {
 	return s.Sessions[sessionID]
 }
 
+//DeleteSession -
 func (s *SessionManager) DeleteSession(sessionID string) {
 	if _, ok := s.Sessions[sessionID]; ok {
 		delete(s.Sessions, sessionID)
 	}
+}
+
+//CheckSession -
+func (s *SessionManager) CheckSession(sessionID string) bool {
+	_, ok := s.Sessions[sessionID]
+	return ok
 }
 
 //SESSIONS END
@@ -60,10 +75,10 @@ func (s *SessionManager) DeleteSession(sessionID string) {
 var manager = NewSessions()
 
 func main() {
-	http.HandleFunc("/index", index)
 	http.HandleFunc("/", index)
+	http.HandleFunc("/index", index)
 	http.HandleFunc("/login", login)
-	//http.HandleFunc("/logoff", notFound)
+	http.HandleFunc("/logoff", logoff)
 
 	err := http.ListenAndServe(":9000", nil)
 	if err != nil {
@@ -72,10 +87,11 @@ func main() {
 }
 
 func index(res http.ResponseWriter, req *http.Request) {
-	cookie, err := req.Cookie("sessionid")
+	fmt.Println(req)
+	cookie, _ := req.Cookie("sessionid")
 	var html string
-	if err == nil {
-		html = fmt.Sprintf(indexPage, "<a href='/logoff'> Logoff "+manager.GetUser(cookie.Value)+"</a>")
+	if manager.CheckSession(cookie.Value) {
+		html = fmt.Sprintf(indexPage, fmt.Sprintf(logoffBlock, manager.GetUser(cookie.Value)))
 	} else {
 		html = fmt.Sprintf(indexPage, loginBlock)
 	}
@@ -123,9 +139,18 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 }
 
-/*func logoff(w http.ResponseWriter, r *http.Request) {
+func logoff(w http.ResponseWriter, r *http.Request) {
 
-}*/
+	fmt.Println("logoff")
+	cookie, _ := r.Cookie("sessionid")
+	fmt.Println("session = ", cookie)
+	if manager.CheckSession(cookie.Value) {
+		manager.DeleteSession(cookie.Value)
+	}
+
+	fmt.Println("Sessions = ", manager.Sessions)
+	http.Redirect(w, r, "/", 301)
+}
 
 func sessionID() string {
 	b := make([]byte, 32)
