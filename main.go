@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/codahale/charlie"
 )
 
 const indexPage = `<doctype html>
@@ -28,10 +30,12 @@ const loginBlock = `<form action="/login" method="post">
 </form>`
 
 const logoffBlock = `<form action="/logoff" method="post">
-    <input type="hidden" name="csrf" value="">    
+    <input type="hidden" name="csrf" value="%s">    
 	<h1>%s</h1>
     <input type="submit" value="Logoff">
 </form>`
+
+var params = charlie.New([]byte("yay for dumbledore"))
 
 //SessionManager -
 type SessionManager struct {
@@ -87,11 +91,13 @@ func main() {
 }
 
 func index(res http.ResponseWriter, req *http.Request) {
+
 	fmt.Println(req)
 	cookie, _ := req.Cookie("sessionid")
 	var html string
 	if manager.CheckSession(cookie.Value) {
-		html = fmt.Sprintf(indexPage, fmt.Sprintf(logoffBlock, manager.GetUser(cookie.Value)))
+		token := params.Generate(cookie.Value)
+		html = fmt.Sprintf(indexPage, fmt.Sprintf(logoffBlock, token, manager.GetUser(cookie.Value)))
 	} else {
 		html = fmt.Sprintf(indexPage, loginBlock)
 	}
@@ -140,10 +146,18 @@ func login(w http.ResponseWriter, r *http.Request) {
 }
 
 func logoff(w http.ResponseWriter, r *http.Request) {
-
 	fmt.Println("logoff")
 	cookie, _ := r.Cookie("sessionid")
 	fmt.Println("session = ", cookie)
+
+	r.ParseForm()
+	token := r.PostFormValue("csrf")
+
+	if err := params.Validate(cookie.Value, token); err != nil {
+		http.Error(w, "Invalid CSRF token", http.StatusBadRequest)
+		return
+	}
+
 	if manager.CheckSession(cookie.Value) {
 		manager.DeleteSession(cookie.Value)
 	}
